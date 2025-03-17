@@ -1,7 +1,8 @@
-use serde::{Deserialize, Serialize};
-use serde_json::Result
+use std::collections::HashMap;
 
-#[derive(Deserialize, Serialize)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct Card {
   id: String,
   name: String,
@@ -13,46 +14,52 @@ struct CardTrieNode {
   card: Option<Card>,
 }
 
+impl CardTrieNode {
+  pub fn get_child(&self, letter: char) -> Option<&CardTrieNode> {
+    return match &self.children {
+      Some(children) => children.get(&letter),
+      None => None
+    }
+  }
+}
+
 #[derive(Default, Debug)]
 struct CardTrie {
   root: CardTrieNode,
 }
 
+
 impl CardTrie {
-  pub fn insert(&mut self, mut card: Card) {
+  pub fn insert(&mut self, card: Card) {
     let mut node = &mut self.root;
     for letter in card.name.to_lowercase().chars() {
-      if node.children == None {
-        node.children = Some(HashMap<char, CardTrieNode>::new());
-      }
-      if let Some(children) = node.children {
-        node = node.children.entry(letter).or_default();
-      }
+      let children = node.children.get_or_insert_default();
+      node = children.entry(letter).or_default();
     }
-    node.card = card;
+    node.card = Some(card);
   }
 
-  pub fn find(&mut self, &str text) -> Vec<Card> {
-    let char_iter = text.chars();
+  pub fn find(&mut self, text: &str) -> Vec<Card> {
+    let mut char_iter = text.chars();
     let mut depth = 0;
     let mut match_length = 0;
-    let &node = self.root;
-    let cards = Vec<Card>::new()
-    let mut current_card: Option<Card> = None;
+    let node = &self.root;
+    let mut cards = Vec::new();
+    let mut current_card: &Option<Card> = &None;
 
-    for letter in char_iter {
-      depth++;
-      match node.children.get(&letter) {
+    while let Some(letter) = char_iter.next() {
+      depth += 1;
+      match node.get_child(letter) {
         Some(child_node) => {
-          if (child_node.card.is_some()) {
-            current_card = child_node.card;
+          if child_node.card.is_some() {
+            current_card = &child_node.card;
             match_length = depth;
           }
         },
         None => {
-          match current_card {
+          match &current_card {
             Some(current_card) => {
-              cards.push(current_card);
+              cards.push(current_card.clone());
             },
             None => {
               char_iter.nth_back(match_length - 1);
@@ -63,6 +70,7 @@ impl CardTrie {
         }
       }
     }
+    return cards;
   }
 }
 
