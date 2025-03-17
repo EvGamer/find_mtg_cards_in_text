@@ -1,4 +1,5 @@
-use std::{collections::HashMap, fs::File, io::BufReader};
+use std::{collections::HashMap, fmt::Display, fs::File, io::BufReader};
+// use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -26,24 +27,32 @@ impl CardTrieNode {
   }
 }
 
+fn format_child_nodes(child_nodes: &Option<CardTrieChildren>) -> String {
+  return match child_nodes {
+    Some(children) => children.keys().map(|key| format!("'{}", key)).collect::<Vec<_>>().join(", ").to_string(),
+    None => "None".to_string(),
+  }
+}
+
+impl Display for CardTrieNode {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let card_name = self.card.as_ref().map_or("None".to_string(), |card|card.name.clone());
+    return write!(f, "( card: {}, children: ({}) )", &card_name, format_child_nodes(&self.children));
+  }
+}
+
 #[derive(Default, Debug)]
 struct CardTrie {
   root: CardTrieNode,
 }
 
-fn format_children(children: &Option<CardTrieChildren>) -> String {
-  return match children {
-    Some(children) => children.keys().map(|key| format!("{}", key)).collect::<Vec<_>>().join(", ").to_string(),
-    None => "".to_string(),
-  };
-}
-
 impl CardTrie {
   pub fn insert(&mut self, card: Card) {
     let mut node = &mut self.root;
-    for letter in card.name.to_lowercase().chars() {
-      let children = node.children.get_or_insert_default();
-      node = children.entry(letter).or_default();
+    for letter in card.name.chars() {
+      let low_letter = letter.to_ascii_lowercase();
+      let children = node.children.get_or_insert_with(||HashMap::new());
+      node = children.entry(low_letter).or_insert_with(||CardTrieNode{ card: None, children: None });
     }
     node.card = Some(card);
   }
@@ -52,48 +61,48 @@ impl CardTrie {
     let mut node = &self.root;
     let mut depth = 0;
 
-    let mut match_length = 0;
     let mut current_card: &Option<Card> = &None;
     let mut cards = Vec::new();
     let mut i = 0;
+    print!("{}\n", text);
 
     let mut char_iter = text.chars();
     while let Some(letter) = char_iter.next() {
-      depth += 1;
-      match node.get_child(letter) {
+      let low_letter = letter.to_ascii_lowercase();
+      print!("{}) letter: \"{}\", len: {}, node:{}\n", i, low_letter, depth, node);
+      match node.get_child(low_letter) {
         Some(child_node) => {
-          print!("{}\n", format_children(&node.children));
+          node = &child_node;
+          depth += 1;
           if child_node.card.is_some() {
             current_card = &child_node.card;
-            match_length = depth;
-            node = child_node;
           }
         },
         None => {
           match &current_card {
-            Some(current_card) => {
-              cards.push(current_card.clone());
+            Some(card) => {
+              cards.push(card.clone());
+              current_card = &None;
             },
             None => {
-              print!("{}", format_children(&node.children));
-              char_iter.nth_back(match_length);
-              i -= match_length;
+              if depth > 1 {
+                char_iter.nth_back(depth);
+                i -= depth;
+              }
             }
           }
           node = &self.root;
           depth = 0;
-          match_length = 0;
         }
       }
       i += 1;
-      print!("i: {i}, depth: {depth} letter: {letter}\n")
     }
     return cards;
   }
 }
 
 fn main() {
-  let cards_file = File::open("C:\\Users\\dunice\\projects\\find_mtg_cards_in_text\\assets\\cards.json").expect("couldn't open file");
+  let cards_file = File::open(".\\assets\\cards.json").expect("couldn't open file");
   let cards_file_reader = BufReader::new(cards_file);
   let cards: Vec<Card> = serde_json::from_reader(cards_file_reader).expect("malformed json");
   
@@ -103,8 +112,8 @@ fn main() {
     card_trie.insert(card);
   }
 
-  let found_cards = card_trie.find("Clock of omens, Plains, Hello world, Demonic Tutor, Defab");
+  let found_cards = card_trie.find("Clock of omens, Plains, World Hello, Demonic Tutor, Defab, Fabricate");
   for card in &found_cards {
-    print!("{}", card.name)
+    print!("{}\n", card.name)
   }
 }
