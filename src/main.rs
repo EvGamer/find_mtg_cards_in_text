@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display, fs::File, io::{BufReader, BufWriter}, path::Path};
 // use std::collections::HashMap;
 
-use bincode::{decode_from_reader, decode_from_std_read, encode_into_std_write, encode_into_writer, error::DecodeError, Decode, Encode};
+use bincode::{decode_from_std_read, encode_into_std_write, error::DecodeError, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -68,6 +68,7 @@ impl CardTrie {
     print!("{}\n", text);
 
     let mut char_iter = text.chars();
+    let mut char_iter_before_match = char_iter.clone();
     while let Some(letter) = char_iter.next() {
       let low_letter = letter.to_ascii_lowercase();
       print!("{}) letter: \"{}\", len: {}, node:{}\n", i, low_letter, depth, node);
@@ -75,6 +76,7 @@ impl CardTrie {
         Some(child_node) => {
           node = &child_node;
           depth += 1;
+          char_iter_before_match = char_iter.clone();
           if child_node.card.is_some() {
             current_card = &child_node.card;
           }
@@ -87,7 +89,7 @@ impl CardTrie {
             },
             None => {
               if depth > 1 {
-                char_iter.nth_back(depth);
+                char_iter = char_iter_before_match.clone();
                 i -= depth;
               }
             }
@@ -97,6 +99,9 @@ impl CardTrie {
         }
       }
       i += 1;
+    }
+    if current_card.is_some() {
+      cards.push(current_card.as_ref().unwrap().clone());
     }
     return cards;
   }
