@@ -1,10 +1,11 @@
-use std::{collections::HashMap, fmt::Display, fs::File, io::BufReader};
+use std::{collections::HashMap, fmt::Display, fs::File, io::{BufReader, BufWriter}, path::Path};
 // use std::collections::HashMap;
 
+use bincode::{decode_from_reader, decode_from_std_read, encode_into_std_write, encode_into_writer, error::DecodeError, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone)]
 struct Card {
   id: String,
   name: String,
@@ -12,7 +13,7 @@ struct Card {
 
 type CardTrieChildren = HashMap<char, CardTrieNode>;
 
-#[derive(Default, Debug)]
+#[derive(Encode, Decode, Default, Debug)]
 struct CardTrieNode {
   children: Option<CardTrieChildren>,
   card: Option<Card>,
@@ -41,7 +42,7 @@ impl Display for CardTrieNode {
   }
 }
 
-#[derive(Default, Debug)]
+#[derive(Encode, Decode, Debug, Default)]
 struct CardTrie {
   root: CardTrieNode,
 }
@@ -57,7 +58,7 @@ impl CardTrie {
     node.card = Some(card);
   }
 
-  pub fn find(&mut self, text: &str) -> Vec<Card> {
+  pub fn find(&self, text: &str) -> Vec<Card> {
     let mut node = &self.root;
     let mut depth = 0;
 
@@ -99,17 +100,71 @@ impl CardTrie {
     }
     return cards;
   }
+
+  fn save(&self, path: &Path) -> Result<(), &str> {
+    let file = File::create(path);
+    if file.is_err() {
+      return Err("failed to save");
+    }
+    let write_buffer = &mut BufWriter::new(file.unwrap());
+    let result = encode_into_std_write(self, write_buffer, bincode::config::standard());
+    if result.is_err() {
+      return Err("failed to save")
+    };
+    return Ok(())
+  }
+
+  fn load_from_card_list(cards_path: &Path) -> Result<Self, &str> {
+    if !cards_path.exists() {
+      return Err("cards list doesnt exist");
+    }
+    let mut cards_trie = CardTrie::default();
+    let cards_file = File::open(cards_path);
+    if cards_file.is_err() {
+      return Err("failed to read file");
+    }
+
+    let cards_file_reader = BufReader::new(cards_file.unwrap());
+    let cards = serde_json::from_reader::<BufReader<File>, Vec<Card>>(cards_file_reader);
+    if cards.is_err() {
+      return Err("malformed json");
+    }
+    
+    for card in cards.unwrap() {
+      cards_trie.insert(card);
+    }
+    return Ok(cards_trie);
+  }
+
+  fn load(path: &Path) -> Result<Self, &str> {
+    if !path.exists() {
+      return Err("file dont exist");
+    }
+    let file = File::open(path);
+    if file.is_err() {
+      return Err("failed to load card trie file");
+    }
+    let read_buffer = &mut BufReader::new(file.unwrap());
+    let result: Result<Self, DecodeError> = decode_from_std_read(read_buffer, bincode::config::standard());
+    if result.is_err() {
+      return Err("failed to decode")
+    }
+    return Ok(result.unwrap())
+  }
 }
 
 fn main() {
-  let cards_file = File::open(".\\assets\\cards.json").expect("couldn't open file");
-  let cards_file_reader = BufReader::new(cards_file);
-  let cards: Vec<Card> = serde_json::from_reader(cards_file_reader).expect("malformed json");
-  
-  let mut card_trie = CardTrie::default();
+  let cards_path = Path::new("./assets/cards.json");
+  let card_trie_path = Path::new("./assets/card_tree.mct");
 
-  for card in cards {
-    card_trie.insert(card);
+  let card_trie= if card_trie_path.exists() { 
+    CardTrie::load(card_trie_path).unwrap()
+  } else {
+    CardTrie::load_from_card_list(cards_path).unwrap()
+  };
+
+  if !card_trie_path.exists() {
+    card_trie.save(card_trie_path).expect("failed_to_save");
   }
 
   let found_cards = card_trie.find("Clock of omens, Plains, World Hello, Demonic Tutor, Defab, Fabricate");
