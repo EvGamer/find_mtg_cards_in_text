@@ -58,7 +58,7 @@ struct CardTrie {
 
 impl CardTrie {
   pub fn insert(&mut self, card: Card) {
-    if card.lang != "en" && card.lang != "ru" {
+    if card.lang != "en" && card.lang != "ru" || card.get_printed_name().len() < 3 {
       return;
     }
     let mut node = &mut self.root;
