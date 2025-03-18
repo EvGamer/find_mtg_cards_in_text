@@ -1,14 +1,23 @@
-use std::{collections::HashMap, fmt::Display, fs::File, io::{BufReader, BufWriter}, path::Path};
+use std::{collections::HashMap, fmt::Display, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path};
 // use std::collections::HashMap;
 
 use bincode::{decode_from_std_read, encode_into_std_write, error::DecodeError, Decode, Encode};
 use serde::{Deserialize, Serialize};
-use serde_json;
+use serde_json::{self, to_writer_pretty};
 
 #[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone)]
 struct Card {
   id: String,
   name: String,
+  printed_name: Option<String>,
+  lang: String,
+
+}
+
+impl Card {
+  fn get_printed_name(&self) -> &String {
+    return self.printed_name.as_ref().unwrap_or(&self.name);
+  }
 }
 
 type CardTrieChildren = HashMap<char, CardTrieNode>;
@@ -37,7 +46,7 @@ fn format_child_nodes(child_nodes: &Option<CardTrieChildren>) -> String {
 
 impl Display for CardTrieNode {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let card_name = self.card.as_ref().map_or("None".to_string(), |card|card.name.clone());
+    let card_name = self.card.as_ref().map_or("None".to_string(), |card|card.get_printed_name().clone());
     return write!(f, "( card: {}, children: ({}) )", &card_name, format_child_nodes(&self.children));
   }
 }
@@ -49,13 +58,30 @@ struct CardTrie {
 
 impl CardTrie {
   pub fn insert(&mut self, card: Card) {
+    if card.lang != "en" && card.lang != "ru" {
+      return;
+    }
     let mut node = &mut self.root;
-    for letter in card.name.chars() {
-      let low_letter = letter.to_ascii_lowercase();
+    for letter in card.get_printed_name().chars() {
+      let low_letter = letter.to_lowercase().next().unwrap();
       let children = node.children.get_or_insert_with(||HashMap::new());
       node = children.entry(low_letter).or_insert_with(||CardTrieNode{ card: None, children: None });
     }
     node.card = Some(card);
+  }
+
+  pub fn find_in_file(&self, path: &Path) -> Result<Vec<Card>, &str> {
+    if !path.exists() { return Err("no file to scan") };
+    let file = File::open(path);
+    if file.is_err() { return Err("failed to load a file ")}
+    let reader = BufReader::new(file.unwrap());
+  
+    let mut cards: Vec<Card> = Vec::new();
+    for line in reader.lines() {
+      if line.is_err() { continue; };
+      cards.extend(self.find(&line.unwrap().to_string()));
+    }
+    return Ok(cards);
   }
 
   pub fn find(&self, text: &str) -> Vec<Card> {
@@ -64,14 +90,13 @@ impl CardTrie {
 
     let mut current_card: &Option<Card> = &None;
     let mut cards = Vec::new();
-    let mut i = 0;
-    print!("{}\n", text);
+    // let mut i = 0;
 
     let mut char_iter = text.chars();
     let mut char_iter_before_match = char_iter.clone();
     while let Some(letter) = char_iter.next() {
-      let low_letter = letter.to_ascii_lowercase();
-      print!("{}) letter: \"{}\", len: {}, node:{}\n", i, low_letter, depth, node);
+      let low_letter = letter.to_lowercase().next().unwrap();
+      // print!("{}) letter: \"{}\", len: {}, node:{}\n", i, low_letter, depth, node);
       match node.get_child(low_letter) {
         Some(child_node) => {
           node = &child_node;
@@ -90,7 +115,7 @@ impl CardTrie {
             None => {
               if depth > 1 {
                 char_iter = char_iter_before_match.clone();
-                i -= depth;
+                // i -= depth;
               }
             }
           }
@@ -98,7 +123,7 @@ impl CardTrie {
           depth = 0;
         }
       }
-      i += 1;
+      // i += 1;
     }
     if current_card.is_some() {
       cards.push(current_card.as_ref().unwrap().clone());
@@ -162,6 +187,7 @@ fn main() {
   let cards_path = Path::new("./assets/cards.json");
   let card_trie_path = Path::new("./assets/card_tree.mct");
 
+  print!("Loading...\n");
   let card_trie= if card_trie_path.exists() { 
     CardTrie::load(card_trie_path).unwrap()
   } else {
@@ -172,8 +198,9 @@ fn main() {
     card_trie.save(card_trie_path).expect("failed_to_save");
   }
 
-  let found_cards = card_trie.find("Clock of omens, Plains, World Hello, Demonic Tutor, Defab, Fabricate");
-  for card in &found_cards {
-    print!("{}\n", card.name)
-  }
+  let found_cards = card_trie.find_in_file(Path::new("./assets/page.html"));
+
+  let output_file = File::create("./assets/found_cards.json").expect("couldn't create output file");
+  let output_file_writer = BufWriter::new(output_file);
+  to_writer_pretty(output_file_writer, &found_cards).expect("failed to write output file");
 }
