@@ -2,15 +2,15 @@ use std::{collections::HashMap, fmt::Display, fs::File, io::{BufRead, BufReader,
 
 use bincode::{decode_from_std_read, encode_into_std_write, error::DecodeError, Decode, Encode};
 
-use crate::card::Card;
+use crate::{card::Card, found_cards::FoundCards};
 
 
 type CardTrieChildren = HashMap<char, CardTrieNode>;
 
 #[derive(Encode, Decode, Default, Debug)]
 pub struct CardTrieNode {
-  children: Option<CardTrieChildren>,
-  card: Option<Card>,
+  pub children: Option<CardTrieChildren>,
+  pub card: Option<Card>,
 }
 
 impl CardTrieNode {
@@ -41,7 +41,8 @@ pub struct CardTrie {
   root: CardTrieNode,
 }
 
-impl CardTrie {
+
+impl<'a> CardTrie {
   pub fn insert(&mut self, card: Card) {
     if card.lang != "en" && card.lang != "ru" || card.get_printed_name().len() < 3 {
       return;
@@ -55,7 +56,7 @@ impl CardTrie {
     node.card = Some(card);
   }
 
-  pub fn find_in_file(&self, path: &Path) -> Result<Vec<Card>, &str> {
+  pub fn find_in_file(&'a self, path: &'a Path) -> Result<Vec<Card>, &'a str> {
     if !path.exists() { return Err("no file to scan") };
     let file = File::open(path);
     if file.is_err() { return Err("failed to load a file ")}
@@ -69,51 +70,8 @@ impl CardTrie {
     return Ok(cards);
   }
 
-  pub fn find(&self, text: &str) -> Vec<Card> {
-    let mut node = &self.root;
-    let mut depth = 0;
-
-    let mut current_card: &Option<Card> = &None;
-    let mut cards = Vec::new();
-    // let mut i = 0;
-
-    let mut char_iter = text.chars();
-    let mut char_iter_before_match = char_iter.clone();
-    while let Some(letter) = char_iter.next() {
-      let low_letter = letter.to_lowercase().next().unwrap();
-      // print!("{}) letter: \"{}\", len: {}, node:{}\n", i, low_letter, depth, node);
-      match node.get_child(low_letter) {
-        Some(child_node) => {
-          node = &child_node;
-          depth += 1;
-          char_iter_before_match = char_iter.clone();
-          if child_node.card.is_some() {
-            current_card = &child_node.card;
-          }
-        },
-        None => {
-          match &current_card {
-            Some(card) => {
-              cards.push(card.clone());
-              current_card = &None;
-            },
-            None => {
-              if depth > 1 {
-                char_iter = char_iter_before_match.clone();
-                // i -= depth;
-              }
-            }
-          }
-          node = &self.root;
-          depth = 0;
-        }
-      }
-      // i += 1;
-    }
-    if current_card.is_some() {
-      cards.push(current_card.as_ref().unwrap().clone());
-    }
-    return cards;
+  pub fn find(&'a self, text: &'a str) -> FoundCards<'a> {
+    return FoundCards::<'a>::new(&self.root, text);
   }
 
   pub fn save(&self, path: &Path) -> Result<(), &str> {
