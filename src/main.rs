@@ -1,10 +1,10 @@
 mod card;
-mod card_tree;
+mod card_trie;
 mod found_cards;
 
 use std::{fs::File, io::BufWriter, path::Path};
 
-use card_tree::CardTrie;
+use card_trie::CardTrie;
 use serde_json::to_writer_pretty;
 
 fn main() {

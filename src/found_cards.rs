@@ -1,6 +1,6 @@
 use std::str::Chars;
 
-use crate::{card::Card, card_tree::CardTrieNode};
+use crate::{card::Card, card_trie::CardTrieNode};
 
 pub struct FoundCards<'a> {
   root: &'a CardTrieNode,
