@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::card::Card;
 
 pub enum CardCondition {
@@ -26,5 +28,12 @@ impl CardListing {
       })
     }
     return None;
+  }
+}
+
+impl Display for CardListing {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let card_name = self.card.get_printed_name();
+    return write!(f, "{} {} {}р", self.quantity, card_name, self.price);
   }
 }
