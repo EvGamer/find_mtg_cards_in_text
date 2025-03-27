@@ -1,6 +1,6 @@
 use crate::card::Card;
 
-enum CardCondition {
+pub enum CardCondition {
   NearMint,
   SlightlyPlayed,
   ModeratelyPlayed,
@@ -9,8 +9,22 @@ enum CardCondition {
 }
 
 pub struct CardListing {
-  card: Card,
-  quantity: u32,
-  price: u32,
-  condition: CardCondition,
+  pub card: Card,
+  pub quantity: u32,
+  pub price: u32,
+  pub condition: CardCondition,
+}
+
+impl CardListing {
+  pub fn try_create(quantity: Option<u32>, card: &Option<Card>, price: Option<u32>) -> Option<Self> {
+    if let (Some(quantity), Some(current_card), Some(price)) = (quantity, current_card, price) {
+      return Some(CardListing {
+        quantity,
+        price,
+        card: current_card.clone(),
+        condition: CardCondition::NearMint,
+      })
+    }
+    return None;
+  }
 }
